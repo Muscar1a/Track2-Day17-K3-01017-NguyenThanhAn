@@ -63,27 +63,26 @@ def main() -> int:
     n_src = len(list(SRC.glob("*.parquet")))
     print(f"  nguồn : {SRC}  ({n_src:,} file)")
 
-    # TODO(nhiệm vụ 4): hiện thực khung COPY ... TO ... ở phần docstring.
-    #
-    #   con.execute(f"""
-    #       copy (
-    #           select * from read_parquet('{SRC}/*.parquet')
-    #           order by ...
-    #       ) to '{DST}' (
-    #           format parquet,
-    #           partition_by (...),
-    #           overwrite_or_ignore,
-    #           row_group_size ...
-    #       )
-    #   """)
-    #
-    # Sau đó kiểm tra không mất hàng nào:
-    #
-    #   assert <số row dataset cũ> == <số row dataset mới>
+    con.execute(f"""
+        copy (
+            select *, strftime(event_time, '%Y-%m-%d') as event_date
+            from read_parquet('{SRC}/*.parquet')
+            order by event_date, customer_name, event_time
+        ) to '{DST}' (
+            format          parquet,
+            partition_by    (event_date),
+            overwrite_or_ignore,
+            row_group_size  2000
+        )
+    """)
 
-    print("\n  tools/compact.py chưa được hiện thực — đây là nhiệm vụ 4.")
-    print("  Mở file này, đọc phần KHUNG THỰC HIỆN ở đầu file và điền vào TODO.")
-    print("  Hướng dẫn từng bước: GUIDE.md mục 4.\n")
+    n_src_rows = con.execute(f"select count(*) from read_parquet('{SRC}/*.parquet')").fetchone()[0]
+    n_dst_rows = con.execute(f"select count(*) from read_parquet('{DST}/**/*.parquet')").fetchone()[0]
+    assert n_src_rows == n_dst_rows, f"row count mismatch: {n_src_rows} vs {n_dst_rows}"
+
+    n_dst = sum(1 for _ in DST.rglob("*.parquet"))
+    print(f"  đích   : {DST}  ({n_dst:,} file)")
+    print(f"  hàng   : {n_src_rows:,} → {n_dst_rows:,}  ✓")
     return 0
 
 
